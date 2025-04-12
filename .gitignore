@@ -172,3 +172,15 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+/.chainlit/
+/.idea/
+/.python-version
+/uv.lock
+/generate_single_file_for_LLM.sh
+/output.md
+/pyproject.toml
+/rags_explained.md
+/reset_all.sh
+/start.sh
+/tutorial.md
+/tutorial_verbose.md

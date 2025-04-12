@@ -1,0 +1,21 @@
+{
+    "entities": [
+        {
+            "id": "NLP",
+            "properties": {
+                "name": "Natural Language Processing",
+                "description": "AI subfield for human language understanding"
+            }
+        }
+    ],
+    "relationships": [
+        {
+            "source": "AI",
+            "target": "NLP",
+            "type": "HAS_SUBFIELD",
+            "properties": {
+                "since": 1960
+            }
+        }
+    ]
+}
