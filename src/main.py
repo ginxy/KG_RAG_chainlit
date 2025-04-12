@@ -4,7 +4,7 @@ import sys
 sys.path.extend(['../','./'])
 
 import chainlit as cl
-from neo4j_operations import Neo4jKG
+from db_operations import Neo4jKG
 from llm_processor import LLMProcessor
 from dotenv import load_dotenv
 import os

@@ -21,7 +21,7 @@ class LLMProcessor:
         Args:
             model_name: Optional override for default model
         """
-        self.model_name = model_name or os.getenv("OLLAMA_MODEL", "llama3")
+        self.model_name = model_name or os.getenv("OLLAMA_MODEL", "deepseek-r1:1.5b")
         self.base_url = os.getenv("OLLAMA_HOST", "http://ollama:11434")
         self.max_tokens = int(os.getenv("MAX_TOKENS", 6000))
         self.temperature = float(os.getenv("LLM_TEMP", 0.7))

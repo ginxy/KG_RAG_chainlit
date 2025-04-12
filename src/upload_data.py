@@ -1,15 +1,14 @@
+import sys
 import concurrent.futures
-from neo4j_operations import Neo4jKG
+from db_operations import Neo4jKG
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 import pandas as pd
 import json
 import asyncio
-import os
 from typing import Union, Dict, List
 from pathlib import Path
-from utils import setup_logger
-
+from src_utils import setup_logger
 logger = setup_logger("data_upload")
 
 
@@ -127,19 +126,18 @@ class DataUploader:
         await self.kg.close()
 
 
-async def main():
+async def main(path_to_doc : str = None):
     uploader = DataUploader()
     try:
         await uploader.initialize()
-
-        # Example uploads - modify paths as needed
-        # await uploader.upload_data("data/entities.csv")
-        await uploader.upload_data("data/tokenization-and-decentralized-business-models.pdf")
-        # await uploader.upload_data("data/knowledge.json")
-
+        if path_to_doc:
+            await uploader.upload_data(path_to_doc)
+        else:
+            await uploader.upload_data("data/tokenization-and-decentralized-business-models.pdf")
     finally:
         await uploader.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    arg1_path = sys.argv[1]
+    asyncio.run(main(arg1_path))

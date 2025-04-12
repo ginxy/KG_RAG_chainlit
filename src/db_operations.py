@@ -35,9 +35,9 @@ class Neo4jKG:
         from qdrant_client.http import models
 
         try:
-            # Create collection if not exists
+            # Create collection if non-existent
             if not self.qdrant.collection_exists("doc_chunks"):
-                self.qdrant.recreate_collection(collection_name="doc_chunks",
+                self.qdrant.create_collection(collection_name="doc_chunks",
                     vectors_config=models.VectorParams(size=self.encoder.get_sentence_embedding_dimension(),
                         distance=models.Distance.COSINE))
                 logger.info("Created Qdrant collection 'doc_chunks'")
