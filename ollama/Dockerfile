@@ -12,7 +12,7 @@ ARG OLLAMA_MODEL=deepseek-r1:1.5b
 ENV OLLAMA_MODEL=$OLLAMA_MODEL
 ENV OLLAMA_KEEP_ALIVE=5m
 
-# Run startup script as entrypoint
+# Move ollama processes to script and run as entrypoint
 ENTRYPOINT ["/start_ollama.sh"]
 
 

@@ -110,14 +110,12 @@ class DataUploader:
 
         embeddings = self.encoder.encode(chunks)
 
-        # Create points payload
         points = [{
             "id": idx, "vector": emb.tolist(), "payload": {
                 "text": chunk, "source": source, "type": "structured_data"
                 }
             } for idx, (chunk, emb) in enumerate(zip(chunks, embeddings))]
 
-        # Upsert to Qdrant
         self.qdrant.upsert(collection_name="doc_chunks", points=points)
         return {"qdrant_vectors": len(points)}
 

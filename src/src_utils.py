@@ -33,7 +33,7 @@ def setup_logger(name: str = "kg_retrieval", log_file: Optional[str] = None) -> 
     logger.addHandler(stdout_handler)
 
     # Add file handler if specified (or use default)
-    log_file = log_file or os.getenv("LOG_FILE", "/app/logs/kg_retrieval.log")
+    log_file = log_file or os.getenv("LOG_FILE", "/app/logs/app.log")
     try:
         # Ensure log directory exists
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -65,16 +65,21 @@ def log_container_startup():
     safe_envs = {k: "****" if any(s in k.lower() for s in ["pass", "key", "secret", "token"]) else v for k, v in
                  os.environ.items()}
     logger.info(f"Environment variables: {safe_envs}")
+
+    # Download libraries for nltk and spacy if not available
     import nltk
     nltk.download('punkt_tab', quiet=True)
 
     import spacy
     spacy.cli.download("en_core_web_lg")
+
     # Log installed packages if possible
     try:
-        import pkg_resources
-        installed = [f"{pkg.key}=={pkg.version}" for pkg in pkg_resources.working_set]
+        import importlib.metadata as importlib_metadata
+
+        installed = [f"{dist.name}=={dist.version}" for dist in importlib_metadata.distributions()]
         logger.info(f"Installed packages: {installed}")
+
     except Exception as e:
         logger.warning(f"Could not log installed packages: {str(e)}")
 
@@ -90,7 +95,7 @@ def async_error_handler(func: Callable[..., Coroutine[Any, Any, Any]]) -> Callab
             logger.debug(f"Completed {func.__name__}")
             return result
         except Exception as e:
-            # Get full stack trace as a string
+            # Get full stack trace
             stack_trace = traceback.format_exc()
             # Log both the exception and its context
             logger.error(f"Error in {func.__name__}: {type(e).__name__}: {str(e)}\n"

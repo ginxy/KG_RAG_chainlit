@@ -1,23 +1,26 @@
 import asyncio
 import concurrent.futures
+import logging
+import os
+import re
 import traceback
 from datetime import datetime
+from typing import List
+from typing import Optional
 
 import numpy as np
-from neo4j.exceptions import ServiceUnavailable
-import logging
 from neo4j import AsyncGraphDatabase
-import re
-from typing import Optional
-import os
 from neo4j.exceptions import AuthError
-from typing import List, Dict, Any
-from utils import (async_error_handler, validate_node_properties, validate_relationship, text_cleaner, timing_decorator,
-                   batch_processor, setup_logger)
-from tenacity import retry, stop_after_attempt, wait_fixed
+from neo4j.exceptions import ServiceUnavailable
+from nltk.tokenize import sent_tokenize
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
-from nltk.tokenize import sent_tokenize
+from tenacity import retry
+from tenacity import stop_after_attempt
+from tenacity import wait_fixed
+
+from src_utils import async_error_handler
+from src_utils import timing_decorator
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +65,8 @@ class Neo4jKG:
             self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password), encrypted=False,
                                                     max_connection_pool_size=5, connection_timeout=30, keep_alive=True)
 
-            # Verify connection
             async with self.driver.session() as session:
-                await session.run("RETURN 1")  # await session.execute_write(lambda tx: tx.run("RETURN 1"))
+                await session.run("RETURN 1")
 
             logger.info("Neo4j connection established")
             return True
@@ -97,16 +99,6 @@ class Neo4jKG:
         async with self.driver.session() as session:
             await session.run(index_query)
 
-    # async def validate_connection(self):
-    #     try:
-    #         async with self.driver.session() as session:
-    #             await session.run("RETURN 1")
-    #         return True
-    #     except AuthError as e:
-    #         raise AuthError("Invalid credentials") from e
-    #     except Exception as e:
-    #         raise ConnectionError(f"Neo4j connection failed: {str(e)}") from e
-
     async def _create_constraints(self):
         queries = ["CREATE CONSTRAINT IF NOT EXISTS FOR (n:Entity) REQUIRE n.id IS UNIQUE",
             "CREATE CONSTRAINT IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE",
@@ -120,7 +112,7 @@ class Neo4jKG:
         seed_data = [{"name": "AI", "description": "Artificial Intelligence"},
                      {"name": "ML", "description": "Machine Learning"}]
         async with self.driver.session() as session:
-            await session.execute_write(self._create_entities, seed_data)
+            await session.execute_write(self._create_entities, seed_data) # transaction object tx in callback function in 1st pos and injected by Neo4j
 
     async def augmented_retrieval(self, query: str, score_threshold: float = None) -> dict:
         """Hybrid search combining KG and vector results"""
@@ -237,7 +229,8 @@ class Neo4jKG:
         # Escape special chars but don't wrap in quotes
         escaped = re.sub(r'([\+\-\&\|\!\(\)\{\}\[\]\^\"\~\*\?\:\\/])', r'\\\1', query)
 
-        # # Split into terms and join with AND operators
+        # Split into terms and join with AND operators for correct full-text bool search
+        # --> next stage: add cases or generalize to reduce noise
         terms = [f"*{t}*" for t in escaped.split() if t not in ["please", "summarize", "the", "text"]]
         return " AND ".join(terms) if terms else None
 
@@ -254,7 +247,6 @@ class Neo4jKG:
         Supported formats: CSV, JSON
         """
         logger.info(f"Ingesting {data_format} file: {file_path}")
-        # Add validation
         if not os.path.exists(file_path):
             logger.error(f"File not found: {file_path}")
             raise FileNotFoundError(f"{file_path} does not exist")
@@ -311,7 +303,6 @@ class Neo4jKG:
         logger.info(f"Starting PDF ingestion: {file_path}")
 
         try:
-            # Verify file exists
             if not os.path.exists(file_path):
                 logger.error(f"PDF file not found: {file_path}")
                 return f"Error: PDF file not found at {file_path}"
@@ -328,7 +319,7 @@ class Neo4jKG:
             text = await self._extract_pdf_text(file_path, executor)
 
             # Check if extraction was successful
-            if not text or len(text) < 50:  # Increased minimum threshold
+            if not text or len(text) < 50:  # Set meaningful minimum threshold
                 logger.error("PDF text extraction returned insufficient text")
                 return "Error: Could not extract sufficient text from PDF. The file might be corrupted, password-protected, or contain only images."
 
@@ -363,6 +354,7 @@ class Neo4jKG:
 
     @staticmethod
     async def _process_entities(tx, entities: List[dict], source: str):
+        """statm to process entities before storing"""
         for entity in entities:
             await tx.run("""
                 MERGE (e:Entity {id: toLower($text)}) 
@@ -463,7 +455,8 @@ class Neo4jKG:
         max_pages = int(os.getenv("PDF_PAGE_LIMIT", "20"))
         extraction_results = []
 
-        # Method 1: PyMuPDF (with layout analysis)
+        # Extracting from PDF depends on content - two methods used to improve extraction
+        # Method 1: PyMuPDF
         try:
             import fitz
             text = []
@@ -532,13 +525,13 @@ class Neo4jKG:
         text = re.sub(r'\n{3,}', '\n\n', text)  # Limit consecutive newlines
         text = re.sub(r'[^\S\n]+', ' ', text)  # Clean spaces
 
-        return text.strip()
+        return text.strip() # try: text.strip().title()
 
     @staticmethod
     def _chunk_text(text: str) -> List[str]:
         """Sentence-aware chunking with overlap preservation"""
         max_chunk = int(os.getenv("MAX_TEXT_CHUNK", "4000"))
-        overlap = int(os.getenv("TEXT_OVERLAP", "500"))
+        overlap = int(os.getenv("TEXT_OVERLAP", "500")) # try different overlaps to reduce info loss
 
         sentences = sent_tokenize(text)
         chunks = []
@@ -630,19 +623,3 @@ class Neo4jKG:
             CREATE (d)-[:CONTAINS]->(c)
             """, batch_id=batch_id, doc_id=f"doc_{batch_id}", count=chunk_count)
 
-    # @staticmethod
-    # async def _process_single_chunk(tx, idx: int, chunk: str):
-    #     """Process a single chunk within a transaction"""
-    #     await tx.run("""MERGE (c:Chunk {id: $id})
-    #         SET c.text = $text,
-    #             c.source = 'pdf_upload',
-    #             c.created_at = datetime()
-    #         """, id=f"chunk_{idx}_{datetime.now().strftime('%Y%m%d%H%M%S')}", text=chunk)
-
-    # @staticmethod
-    # async def _process_text_chunks(tx, chunks: List[str]):
-    #     for idx, chunk in enumerate(chunks):
-    #         await tx.run("""MERGE (c:Chunk {id: $id})
-    #             SET c.text = $text,
-    #                 c.source = 'pdf_upload'
-    #             """, id=f"chunk_{idx}", text=chunk)
