@@ -29,22 +29,16 @@ class DataUploader:
             raise ConnectionError("Failed to connect to Qdrant")
         logger.info("Connected to both Neo4j and Qdrant")
 
-    async def upload_data(self, file_path: Union[str, Path], data_type: str = "auto") -> str:
-        """Maintain original return format"""
+    async def upload_data(self, file_path: Union[str, Path]) -> str:
+        """Proper MCP tool usage with chunking"""
         try:
             result = await self.mcp.execute_tool("pdf_ingestion", params={
-                "file_path": file_path, "original_filename": os.path.basename(file_path)
-                }, timeout=120  # Longer timeout for files
-                )
-
-            # Preserve original success message format
-            return (f"Successfully processed PDF: extracted {result['characters']} characters, "
-                    f"identified {result['entities']} entities, created {result['chunks']} chunks.")
-
-        except MCPTimeoutError:
-            return "Error: PDF processing timed out"
+                "file_path": str(file_path.absolute()), "original_filename": file_path.name
+                }, timeout=300, progress_callback=lambda p: logger.info(f"Progress: {p}%"))
+            return result.get("message", "Upload completed")
         except Exception as e:
-            return f"Error processing PDF: {str(e)}"
+            logger.error(f"Upload failed: {str(e)}")
+            return f"Error: {str(e)}"
         # """
         # Unified data uploader that handles multiple formats:
         # - CSV: Structured knowledge graph data

@@ -2,13 +2,21 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y gcc python3-dev
 
-COPY mcp_server/ /app/mcp_server/
-COPY src/ /app/src/
+# Install required packages (removed mcp)
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    neo4j>=5.12 \
+    qdrant-client>=1.6.5 \
+    sentence-transformers>=2.2.2 \
+    httpx \
+    python-dotenv
 
-ENV PYTHONPATH "${PYTHONPATH}:/app"
-EXPOSE 7432
+# Copy only mcp_server files
+COPY mcp_server/ /app/
+COPY config/models.yaml /app/config/
 
-CMD ["uvicorn", "mcp_server.server:app", "--host", "0.0.0.0", "--port", "7432"]
+ENV PYTHONPATH="/app:${PYTHONPATH}"
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7432"]

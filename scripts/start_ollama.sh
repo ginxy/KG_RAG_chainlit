@@ -11,8 +11,10 @@ echo "⏳ Waiting for Ollama server to start..."
 sleep 5
 
 # Pull the specified model
-echo "📥 Downloading ${OLLAMA_MODEL}..."
-ollama pull ${OLLAMA_MODEL}
+if ! ollama list | grep -q ${OLLAMA_MODEL}; then
+    echo "Downloading model ${OLLAMA_MODEL}"
+    ollama pull ${OLLAMA_MODEL}
+fi
 
 # Verify model was downloaded
 echo "✅ Verifying model..."

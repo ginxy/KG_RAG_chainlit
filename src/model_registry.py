@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 class ModelRegistry:
     def __init__(self, config_path="./config/models.yaml"):
-        self.config = self._load_config(config_path)
+        self.config = self._load_config(config_path or "config/models.yaml")
         if self.config:
             logger.info(f"Model registry initialized with {len(self.config.get('options', []))} models")
             logger.debug(f"Full config content: {self.config}")
@@ -16,23 +16,21 @@ class ModelRegistry:
             logger.warning("Failed to initialize model registry config")
 
     @staticmethod
-    def _load_config(path):
+    def _load_config(path: str):
+        """Added explicit error handling"""
         try:
             config_file = Path(__file__).parent.parent / path
-            logger.debug(f"Looking for config file at: {config_file}")
-
             if not config_file.exists():
-                logger.error(f"Config file not found: {config_file}")
-                return {"default": "deepseek-r1:1.5b", "options": []}
+                raise FileNotFoundError(f"Config file {path} not found")
 
             with open(config_file) as f:
-                config = yaml.safe_load(f)
-                logger.debug(f"Loaded config: {config}")
-                return config.get('models', config)
+                return yaml.safe_load(f)
         except Exception as e:
-            logger.error(f"Error loading model config from {path}: {str(e)}")
-            # Return a minimal default config to prevent errors
-            return {"default": "deepseek-r1:1.5b", "options": []}
+            logging.error(f"Error loading config: {str(e)}")
+            return {
+                "default": "deepseek-r1:1.5b",
+                "options": []
+            }
 
     def get_model_config(self, model_name=None):
         try:

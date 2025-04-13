@@ -7,8 +7,8 @@ from typing import AsyncGenerator, List, Dict, Optional
 import os
 import logging
 from litellm import acompletion
+from src.mcp_client import MCPClient
 from model_registry import ModelRegistry
-
 logger = logging.getLogger(__name__)
 
 
@@ -33,25 +33,18 @@ class LLMProcessor:
         self._load_model_config()
 
     def _load_model_config(self):
-        """Proper config loading with fallback"""
+        """Updated MCP resource handling"""
         try:
-            raw_config = self.mcp.get_resource("model_registry")
-
-            # Transform to original ModelRegistry format
-            self._model_config = {
-                "default": raw_config["default_model"], "options": [{
-                    "name"       : m["model_name"],
-                    "max_tokens" : m["token_limit"],
-                    "temperature": m["temperature"],
-                    "template"   : m.get("prompt_template")
-                    } for m in raw_config["models"]]
-                }
-
+            response = self.mcp.execute_tool("get_model_config", {})
+            if "error" in response:
+                raise ValueError(response["error"])
+            self._model_config = response
         except Exception as e:
-            logger.warning(f"Using local config: {str(e)}")
-            # Fallback to original local config loading
-            registry = ModelRegistry()
-            self._model_config = registry.config
+            logger.error(f"Failed to load model config: {str(e)}")
+            # Fallback to local config
+            from .model_registry import ModelRegistry
+            self._model_config = ModelRegistry().config
+
     # def _load_model_config(self):
     #     """Attempt to load model configuration from registry"""
     #     try:
