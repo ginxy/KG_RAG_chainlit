@@ -30,6 +30,9 @@ ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=DEBUG
 ENV LOG_FILE=/app/logs/app.log
 ENV PYTHONPATH="${PYTHONPATH}:/app/src"
+ENV MCP_AUTH_TOKEN=supersecrettoken
+ENV MCP_HOST=http://mcp:7432
+
 
 # Create a healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \

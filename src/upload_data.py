@@ -1,12 +1,14 @@
+import os
 import sys
 import concurrent.futures
-from db_operations import Neo4jKG
+from db_operations import DBOps
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 import pandas as pd
 import json
 import asyncio
 from typing import Union, Dict, List
+from mcp import MCPClient
 from pathlib import Path
 from src_utils import setup_logger
 logger = setup_logger("data_upload")
@@ -14,9 +16,10 @@ logger = setup_logger("data_upload")
 
 class DataUploader:
     def __init__(self):
-        self.kg = Neo4jKG()
+        self.kg = DBOps()
         self.qdrant = QdrantClient(host="qdrant", port=6333)
         self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.mcp = MCPClient(host=os.getenv("MCP_HOST"), auth_token=os.getenv("MCP_AUTH_TOKEN"), retries=3)
 
     async def initialize(self):
         """Initialize connections to both databases"""
@@ -26,34 +29,51 @@ class DataUploader:
             raise ConnectionError("Failed to connect to Qdrant")
         logger.info("Connected to both Neo4j and Qdrant")
 
-    async def upload_data(self, file_path: Union[str, Path], data_type: str = "auto") -> Dict[str, int]:
-        """
-        Unified data uploader that handles multiple formats:
-        - CSV: Structured knowledge graph data
-        - JSON: Semi-structured data with entities/relationships
-        - TXT/PDF: Raw text documents (processed into chunks)
-        """
-        file_path = Path(file_path)
-        stats = {"neo4j_nodes": 0, "qdrant_vectors": 0}
-
-        if data_type == "auto":
-            data_type = file_path.suffix[1:].lower()
-
+    async def upload_data(self, file_path: Union[str, Path], data_type: str = "auto") -> str:
+        """Maintain original return format"""
         try:
-            if data_type == "csv":
-                stats.update(await self._process_csv(file_path))
-            elif data_type == "json":
-                stats.update(await self._process_json(file_path))
-            elif data_type in ["txt", "pdf"]:
-                stats.update(await self._process_document(file_path))
-            else:
-                raise ValueError(f"Unsupported file type: {data_type}")
+            result = await self.mcp.execute_tool("pdf_ingestion", params={
+                "file_path": file_path, "original_filename": os.path.basename(file_path)
+                }, timeout=120  # Longer timeout for files
+                )
 
-            logger.info(f"Upload completed: {stats}")
-            return stats
+            # Preserve original success message format
+            return (f"Successfully processed PDF: extracted {result['characters']} characters, "
+                    f"identified {result['entities']} entities, created {result['chunks']} chunks.")
+
+        except MCPTimeoutError:
+            return "Error: PDF processing timed out"
         except Exception as e:
-            logger.error(f"Upload failed: {str(e)}")
-            raise
+            return f"Error processing PDF: {str(e)}"
+        # """
+        # Unified data uploader that handles multiple formats:
+        # - CSV: Structured knowledge graph data
+        # - JSON: Semi-structured data with entities/relationships
+        # - TXT/PDF: Raw text documents (processed into chunks)
+        # """
+        # file_path = Path(file_path)
+        # stats = {"neo4j_nodes": 0, "qdrant_vectors": 0}
+        #
+        # if data_type == "auto":
+        #     data_type = file_path.suffix[1:].lower()
+        #
+        # try:
+        #     if data_type == "csv":
+        #         stats.update(await self._process_csv(file_path))
+        #     elif data_type == "json":
+        #         stats.update(await self._process_json(file_path))
+        #     elif data_type in ["txt", "pdf"]:
+        #         stats.update(await self._process_document(file_path))
+        #     else:
+        #         raise ValueError(f"Unsupported file type: {data_type}")
+        #
+        #     logger.info(f"Upload completed: {stats}")
+        #     # return stats
+        #     return await self.mcp.execute_tool("pdf_ingestion", file_path=file_path,
+        #         original_filename=os.path.basename(file_path))
+        # except Exception as e:
+        #     logger.error(f"Upload failed: {str(e)}")
+        #     raise
 
     async def _process_csv(self, file_path: Path) -> Dict[str, int]:
         """Process CSV files with structured relationships"""

@@ -4,7 +4,7 @@ import sys
 sys.path.extend(['../','./'])
 
 import chainlit as cl
-from db_operations import Neo4jKG
+from db_operations import DBOps
 from llm_processor import LLMProcessor
 from dotenv import load_dotenv
 import os
@@ -33,41 +33,64 @@ logger.info("Application starting")
 
 @cl.on_chat_start
 async def init_kg():
-    logger.info("New chat session started")
     try:
-        # Create and connect Neo4j knowledge graph
-        logger.info("Initializing Neo4j connection")
-        kg = Neo4jKG()
+        # Create shared MCP client for session
+        mcp = MCPClient(host=os.getenv("MCP_HOST"), auth_token=os.getenv("MCP_AUTH_TOKEN"),
+            session_id=cl.user_session.get("id")  # Track per session
+            )
 
-        if not await kg.connect():
-            error_msg = "Failed to connect to Neo4j database"
-            logger.error(error_msg)
-            await cl.Message(content=error_msg).send()
-            return
+        # Initialize components with MCP client
+        kg = Neo4jKG(mcp)  # Modified constructor
+        llm = LLMProcessor(mcp)  # Pass MCP client
 
-        # Initialize the knowledge graph
-        logger.info("Initializing knowledge graph")
-        await kg.initialize()
+        # Verify connectivity
+        await mcp.ping()
 
-        # Store in user session
-        logger.info("Setting up LLM processor")
+        cl.user_session.set("mcp", mcp)
         cl.user_session.set("kg", kg)
-        cl.user_session.set("llm", LLMProcessor())
+        cl.user_session.set("llm", llm)
 
-        logger.info("Chat session initialized successfully")
-
-    except AuthError as e:
-        error_msg = f"Neo4j authentication error: {str(e)}"
-        logger.error(error_msg)
-        await cl.Message(content=error_msg).send()
-        raise
-    except Exception as e:
-        # Get full stack trace
-        stack_trace = traceback.format_exc()
-        error_msg = f"Error during initialization: {str(e)}"
-        logger.error(f"{error_msg}\n{stack_trace}")
-        await cl.Message(content=error_msg).send()
-        raise
+    except MCPConnectionError as e:
+        await cl.Message(content="System temporarily unavailable").send()
+# async def init_kg():
+#     logger.info("New chat session started")
+#     try:
+#         # Create and connect Neo4j knowledge graph
+#         logger.info("Initializing Neo4j connection")
+#         kg = DBOps()
+#
+#         if not await kg.connect():
+#             error_msg = "Failed to connect to Neo4j database"
+#             logger.error(error_msg)
+#             await cl.Message(content=error_msg).send()
+#             return
+#
+#         # Initialize the knowledge graph
+#         logger.info("Initializing knowledge graph")
+#         await kg.initialize()
+#
+#         # Store in user session
+#         logger.info("Setting up LLM processor")
+#         cl.user_session.set("kg", kg)
+#         cl.user_session.set("llm", LLMProcessor())
+#
+#         mcp = MCPClient(os.getenv("MCP_HOST"), os.getenv("MCP_AUTH_TOKEN"))
+#         cl.user_session.set("mcp", mcp)
+#
+#         logger.info("Chat session initialized successfully")
+#
+#     except AuthError as e:
+#         error_msg = f"Neo4j authentication error: {str(e)}"
+#         logger.error(error_msg)
+#         await cl.Message(content=error_msg).send()
+#         raise
+#     except Exception as e:
+#         # Get full stack trace
+#         stack_trace = traceback.format_exc()
+#         error_msg = f"Error during initialization: {str(e)}"
+#         logger.error(f"{error_msg}\n{stack_trace}")
+#         await cl.Message(content=error_msg).send()
+#         raise
 
 
 @cl.on_message
