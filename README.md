@@ -3,7 +3,7 @@
 
 ---
 
-### **What is it?**  
+### **Overview**  
 Run your own AI assistant locally with ease, ask questions and get answers backed by additional information you can provide *and* the structured knowledge contained in it. Under the hood, it uses:  
 - **Neo4j**: A graph database to store relationships.  
 - **Ollama**: Runs open-source LLMs (like Llama 3 or DeepSeek) locally.  
