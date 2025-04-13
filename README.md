@@ -1,5 +1,5 @@
-## **Building a Knowledge Graph-Powered AI Assistant: A Step-by-Step Guide**  
-*Deploy a Dockerized system that combines LLMs, frontend, Neo4j, and semantic search*  
+## **Running Your Own Vector DB- and Knowledge Graph-Powered AI Assistant**  
+*Deploy a Dockerized system that combines LLMs, frontend, knowledge graphs, and semantic search*  
 
 ---
 
