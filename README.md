@@ -3,14 +3,14 @@
 
 ---
 
-### **Why This Matters**  
-Imagine asking an AI assistant a question and getting answers backed by both real-time data *and* structured knowledge. That’s exactly what this framework does. Under the hood, it uses:  
-- **Neo4j**: A graph database to store relationships (e.g., "Einstein studied *Physics*").  
+### **What is it?**  
+Run your own AI assistant locally with ease, ask questions and get answers backed by additional information you can provide *and* the structured knowledge contained in it. Under the hood, it uses:  
+- **Neo4j**: A graph database to store relationships.  
 - **Ollama**: Runs open-source LLMs (like Llama 3 or DeepSeek) locally.  
 - **Qdrant**: A vector database for semantic search (finding "similar" text chunks).  
 - **Chainlit**: A user-friendly UI for chatting and uploading files.  
 
-This short tutorial will guide you through the deployment.  
+This short tutorial will guide you through the deployment. (Please note: I might have overlooked some errors. Just let me know...)
 
 ---
 
@@ -152,7 +152,7 @@ docker exec -it kg_rag_chainlit-app-1 python src/upload_data.py
 
 **What Happens to Your Data?**  
 - PDFs are split into text chunks (with overlap to preserve context).  
-- Entities (like people, concepts) are extracted using Presidio and stored in Neo4j.  
+- Entities (like people, concepts) are extracted and stored in Neo4j.  
 - Chunks are embedded into Qdrant for semantic search.  
 
 ---
@@ -186,7 +186,7 @@ Edit `config/models.yaml` to change how the LLM formats responses:
     [QUESTION]  
     {query}
     [INSTRUCTIONS]
-    - ANSWER IN PIRATE LANGUAGE  <!-- Yes, you can do this 🏴‍☠️  
+    - ANSWER IN PIRATE LANGUAGE   
 ```  
 
 ---
@@ -223,10 +223,6 @@ This framework is a playground for experimenting with hybrid AI systems. Want to
 - Adding web scraping to auto-populate the knowledge graph.  
 - Integrating voice input with Whisper.  
 - Fine-tuning the LLM on your domain-specific data.  
-
-The key is to start small — deploy the system, upload a PDF, and ask a question. Once you see it working, the possibilities feel endless.  
-
-*Got stuck? Feel free to contact me, and I’ll try to help!* 🚀  
 
 --- 
 
