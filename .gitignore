@@ -185,4 +185,4 @@ cython_debug/
 /tutorial.md
 /tutorial_verbose.md
 /articles/*
-create_standalone_uv_env.md
+/create_standalone_uv_env.md
