@@ -21,21 +21,18 @@ from tenacity import wait_fixed
 
 from src_utils import async_error_handler
 from src_utils import timing_decorator
-from mcp import MCPClient, MCPRequest
 
 logger = logging.getLogger(__name__)
 
 
-class DBOps:
+class Neo4jKG:
     def __init__(self):
         self.driver = None
         self.ft_index_name = "entitySearch"
         self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
         self.qdrant = QdrantClient(host="qdrant", port=6333)
         self._init_vector_db()
-        self.mcp = MCPClient(host=os.getenv("MCP_HOST"), auth_token=os.getenv("MCP_AUTH_TOKEN"), default_timeout=30
-            # Match Neo4j timeout
-            )
+
     def _init_vector_db(self):
         """Ensure Qdrant collection exists with correct schema"""
         from qdrant_client.http import models
@@ -118,47 +115,32 @@ class DBOps:
             await session.execute_write(self._create_entities, seed_data) # transaction object tx in callback function in 1st pos and injected by Neo4j
 
     async def augmented_retrieval(self, query: str, score_threshold: float = None) -> dict:
-        """Matches MCP tool name"""
+        """Hybrid search combining KG and vector results"""
         score_threshold = score_threshold or float(os.getenv("KG_SCORE_THRESHOLD", 0.15))
         max_results = int(os.getenv("MAX_RETRIEVAL_RESULTS", 10))
         diversity_penalty = float(os.getenv("SEARCH_DIVERSITY_PENALTY", 1.0))
 
-        try:
-            response = await self.mcp.execute_tool("augmented_retrieval", params={
-                "query": query, "score_threshold": score_threshold
-                }, return_type="kg_response"  # Custom response format
-                )
+        # Execute all searches in parallel
+        kg_entities = self._search_entities(query, score_threshold)
+        kg_chunks = self._search_chunks(query, score_threshold)
+        vector_results = self.vector_search(query)
 
-            # Transform MCP response to original structure and check whether initial return already has correct form
-            return {
-                "entities": response.get("entities", []), "chunks": response.get("chunks", [])
-                }
+        # Wait for all results
+        kg_entities, kg_chunks, vector_results = await asyncio.gather(kg_entities, kg_chunks, vector_results)
 
-        except Exception as e:
-            logger.error(f"MCP retrieval failed: {str(e)}")
-            return {"entities": [], "chunks": []}  # Fallback
+        # Convert vector results to match chunk format
+        vector_chunks = [{
+            "text": res["text"], "score": res["score"], "source": "vector"
+            } for res in vector_results]
 
-        # # Execute all searches in parallel
-        # kg_entities = self._search_entities(query, score_threshold)
-        # kg_chunks = self._search_chunks(query, score_threshold)
-        # vector_results = self.vector_search(query)
-        #
-        # # Wait for all results
-        # kg_entities, kg_chunks, vector_results = await asyncio.gather(kg_entities, kg_chunks, vector_results)
-        #
-        # # Convert vector results to match chunk format
-        # vector_chunks = [{
-        #     "text": res["text"], "score": res["score"], "source": "vector"
-        #     } for res in vector_results]
-        #
-        # # Combine and deduplicate chunks
-        # combined_chunks = self._combine_results(kg_chunks=kg_chunks, vector_chunks=vector_chunks,
-        #                                         diversity_penalty=diversity_penalty, max_results=max_results)
-        #
-        # # Return in original format with additional source metadata
-        # return {
-        #     "entities": kg_entities, "chunks": combined_chunks
-        #     }
+        # Combine and deduplicate chunks
+        combined_chunks = self._combine_results(kg_chunks=kg_chunks, vector_chunks=vector_chunks,
+                                                diversity_penalty=diversity_penalty, max_results=max_results)
+
+        # Return in original format with additional source metadata
+        return {
+            "entities": kg_entities, "chunks": combined_chunks
+            }
 
     def _combine_results(self, kg_chunks: List[dict], vector_chunks: List[dict], diversity_penalty: float,
                          max_results: int) -> List[dict]:

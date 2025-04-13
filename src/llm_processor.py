@@ -26,50 +26,26 @@ class LLMProcessor:
         self.max_tokens = int(os.getenv("MAX_TOKENS", 6000))
         self.temperature = float(os.getenv("LLM_TEMP", 0.7))
         self.template = None
-        self.mcp = MCPClient(host=os.getenv("MCP_HOST"), auth_token=os.getenv("MCP_AUTH_TOKEN"))
-        self._model_config = None
 
         # Load model configuration
         self._load_model_config()
 
     def _load_model_config(self):
-        """Proper config loading with fallback"""
+        """Attempt to load model configuration from registry"""
         try:
-            raw_config = self.mcp.get_resource("model_registry")
-
-            # Transform to original ModelRegistry format
-            self._model_config = {
-                "default": raw_config["default_model"], "options": [{
-                    "name"       : m["model_name"],
-                    "max_tokens" : m["token_limit"],
-                    "temperature": m["temperature"],
-                    "template"   : m.get("prompt_template")
-                    } for m in raw_config["models"]]
-                }
-
-        except Exception as e:
-            logger.warning(f"Using local config: {str(e)}")
-            # Fallback to original local config loading
             registry = ModelRegistry()
-            self._model_config = registry.config
-    # def _load_model_config(self):
-    #     """Attempt to load model configuration from registry"""
-    #     try:
-    #         self.model_config = self.mcp.get_resource("model_registry")
-    #
-    #         registry = ModelRegistry()
-    #         logger.info(f"Loading model config for {self.model_name}")
-    #         model_config = registry.get_model_config(self.model_name)
-    #         if model_config:
-    #             self.max_tokens = model_config.get("max_tokens", self.max_tokens)
-    #             self.temperature = model_config.get("temperature", self.temperature)
-    #             self.template = model_config.get("template")
-    #             logger.info(f"Found model config: {model_config}")
-    #             logger.info(f"Using max_tokens={self.max_tokens}, temperature={self.temperature}")
-    #             if self.template:
-    #                 logger.info("Custom template loaded successfully")
-    #     except Exception as e:
-    #         logger.warning(f"Using environment config due to registry error: {str(e)}")
+            logger.info(f"Loading model config for {self.model_name}")
+            model_config = registry.get_model_config(self.model_name)
+            if model_config:
+                self.max_tokens = model_config.get("max_tokens", self.max_tokens)
+                self.temperature = model_config.get("temperature", self.temperature)
+                self.template = model_config.get("template")
+                logger.info(f"Found model config: {model_config}")
+                logger.info(f"Using max_tokens={self.max_tokens}, temperature={self.temperature}")
+                if self.template:
+                    logger.info("Custom template loaded successfully")
+        except Exception as e:
+            logger.warning(f"Using environment config due to registry error: {str(e)}")
 
     async def generate_response(self, query: str, context: Optional[str] = None) -> AsyncGenerator[str, None]:
         """
